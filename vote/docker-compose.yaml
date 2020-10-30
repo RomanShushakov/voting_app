@@ -1,0 +1,26 @@
+version: "3.8"
+
+networks:
+  app_net:
+    driver: bridge
+
+services:
+  redis:
+    image: "redis:6.0.9"
+    container_name: vote_app_redis
+    networks:
+      - app_net
+
+  app:
+    build: .
+    container_name: vote_app
+    environment:
+      REDIS_ADDR: redis:6379
+      SECRET_KEY: secret_key
+    command: bash -c "cd ./app && cargo run --release"
+    networks:
+      - app_net
+    ports:
+      - 8080:8080
+    depends_on:
+      - redis
