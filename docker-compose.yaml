@@ -1,0 +1,76 @@
+version: "3.8"
+
+services:
+  redis:
+    image: "redis:6.0.9"
+    container_name: redis
+    networks:
+      - app_net
+    restart: always
+
+  vote_app:
+    build: ./vote
+    container_name: vote_app
+    environment:
+      REDIS_ADDR: redis:6379
+    command: bash -c "cd ./app && cargo run --release"
+    networks:
+      - app_net
+    restart: always
+    ports:
+      - 8080:8080
+    depends_on:
+      - redis
+
+  mongodb:
+    image: mongo:4.2.10
+    container_name: mongodb
+    networks:
+      - app_net
+    restart: always
+    volumes:
+      - mongodb:/data/db
+
+  worker_app:
+    build: ./worker
+    container_name: worker_app
+    environment:
+      REDIS_ADDR: redis://redis:6379
+      REDIS_KEY: votes
+      MONGODB_ADDR: mongodb://mongodb:27017
+      MONGODB_DB_NAME: votes_db
+      MONGODB_COLLECTION_NAME: votes_collection
+    command: bash -c "cd ./app && cargo run --release"
+    networks:
+      - app_net
+    restart: always
+    depends_on:
+      - redis
+      - mongodb
+
+  result_app:
+    build: ./result
+    container_name: result_app
+    environment:
+      MONGODB_ADDR: mongodb://mongodb:27017
+      MONGODB_DB_NAME: votes_db
+      MONGODB_COLLECTION_NAME: votes_collection
+    command: bash -c "cd ./yew_app &&
+                  echo "WEBSOCKET_URL=ws://localhost:8081/ws/" > .env &&
+                  wasm-pack build --target web --out-name wasm --out-dir ../app/web_layout/wasm &&
+                  cd ../app &&
+                  cargo run --release"
+    networks:
+      - app_net
+    restart: always
+    ports:
+      - 8081:8080
+    depends_on:
+      - mongodb
+
+networks:
+  app_net:
+    driver: bridge
+
+volumes:
+  mongodb:
